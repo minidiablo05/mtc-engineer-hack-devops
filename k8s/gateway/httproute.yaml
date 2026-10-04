@@ -1,0 +1,26 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+
+metadata:
+  name: nginx-route
+  namespace: hackathon
+
+spec:
+
+  parentRefs:
+
+    - name: hackathon-gateway
+      sectionName: https
+
+  rules:
+
+    - matches:
+
+        - path:
+            type: PathPrefix
+            value: /
+
+      backendRefs:
+
+        - name: nginx
+          port: 80

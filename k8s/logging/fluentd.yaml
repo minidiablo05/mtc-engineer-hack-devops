@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: logging
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluentd
+subjects:
+  - kind: ServiceAccount
+    name: fluentd
+    namespace: logging
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: logging
+
+data:
+  fluent.conf: |
+    <source>
+      @type tail
+
+      path /var/log/containers/*hackathon*nginx*.log
+
+      pos_file /fluentd/log/fluentd-nginx.pos
+
+      tag kubernetes.nginx
+
+      read_from_head true
+
+      <parse>
+        @type json
+        time_key time
+        time_type string
+        keep_time_key true
+      </parse>
+    </source>
+
+
+    <match kubernetes.nginx>
+      @type loki
+
+      url "http://loki-gateway.logging.svc.cluster.local"
+
+      extra_labels {
+        "application":"nginx",
+        "namespace":"hackathon",
+        "environment":"hackathon"
+      }
+
+      line_format json
+
+      <buffer>
+        flush_interval 5s
+        flush_at_shutdown true
+      </buffer>
+    </match>
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: logging
+
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+
+  template:
+    metadata:
+      labels:
+        app: fluentd
+
+    spec:
+      serviceAccountName: fluentd
+
+      containers:
+        - name: fluentd
+          image: grafana/fluent-plugin-loki:main
+
+          env:
+            - name: FLUENTD_CONF
+              value: fluent.conf
+
+          volumeMounts:
+            - name: config
+              mountPath: /fluentd/etc/fluent.conf
+              subPath: fluent.conf
+
+            - name: containers
+              mountPath: /var/log/containers
+              readOnly: true
+
+            - name: pods
+              mountPath: /var/log/pods
+              readOnly: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: fluentd-config
+
+        - name: containers
+          hostPath:
+            path: /var/log/containers
+
+        - name: pods
+          hostPath:
+            path: /var/log/pods

@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hackathon-tls
+  namespace: hackathon
+spec:
+  secretName: hackathon-tls
+  issuerRef:
+    name: hackathon-selfsigned
+    kind: Issuer
+
+  dnsNames:
+    - __GATEWAY_HOSTNAME__
